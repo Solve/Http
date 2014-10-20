@@ -1,0 +1,22 @@
+{
+    "name": "solve/http",
+    "type": "library",
+    "description": " - [ HTTP Foundation ]",
+    "keywords": ["http","request","response","post","get","json"],
+    "homepage": "http://github.com/Solve/Http",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Alexandr Viniychuk",
+            "email": "alexandr.viniychuk@icloud.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0",
+        "solve/storage": "*"
+    },
+    "autoload": {
+        "psr-0": { "Solve\\Http\\": "" }
+    },
+    "target-dir": "Solve/Http"
+}
