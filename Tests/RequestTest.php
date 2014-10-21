@@ -13,15 +13,24 @@ use Solve\Http\Request;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../Request.php';
+require_once __DIR__ . '/../HeaderStorage.php';
+require_once __DIR__ . '/../HttpStatus.php';
 require_once __DIR__ . '/../Response.php';
 
 class RequestTest extends \PHPUnit_Framework_TestCase {
 
     public function testBasic() {
-        $request = Request::getMainInstance();
+        $request = Request::getIncomeRequest();
         $this->assertEquals(Request::MODE_CONSOLE, $request->getExecutionMode(), 'Console request detected');
-        
-        var_dump($request->getHost());die();
+
+        $response = Request::createInstance()->setHost('google.com')->send();
+        var_dump($response);die();
+        var_dump($response->getHeaders()->getAll());die();
+        if ($response->isRedirection()) {
+        }
+        var_dump($response->getContent());die();
+
+        die('1');
     }
 
 }

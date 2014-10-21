@@ -39,9 +39,9 @@ class Request {
 
     private $_uri;
     private $_host;
-    private $_scheme;
+    private $_scheme          = 'http';
     private $_port            = 80;
-    private $_method;
+    private $_method          = self::METHOD_GET;
     private $_userAgent;
     private $_basicAuthenticationData;
     private $_attachments     = array();
@@ -62,18 +62,22 @@ class Request {
     /**
      * @var Request
      */
-    static private $_mainInstance;
+    static private $_incomeRequestInstance;
 
     public function __construct() {
         $this->_vars = new ArrayStorage();
     }
 
-    public static function getMainInstance() {
-        if (!self::$_mainInstance) {
-            self::$_mainInstance = new Request();
-            self::$_mainInstance->processEnvironment();
+    public static function createInstance() {
+        return new Request();
+    }
+
+    public static function getIncomeRequest() {
+        if (!self::$_incomeRequestInstance) {
+            self::$_incomeRequestInstance = new Request();
+            self::$_incomeRequestInstance->processEnvironment();
         }
-        return self::$_mainInstance;
+        return self::$_incomeRequestInstance;
     }
 
     private function processEnvironment() {
@@ -392,7 +396,10 @@ class Request {
         } else if (strpos(strtolower(var_export($responseHeaders, true)), "content-encoding: deflate") !== false) {
             $responseData = gzinflate($responseData);
         }
-        return array('headers' => $responseHeaders, 'data' => $responseData);
+//        return array('headers' => $responseHeaders, 'data' => $responseData);
+        $response = new Response($responseData, 200);
+        $response->getHeaders()->setFromStringsArray($responseHeaders);
+        return $response;
     }
 
     static private function unchunk($data) {
