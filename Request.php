@@ -39,7 +39,7 @@ class Request {
 
     private $_uri;
     private $_host;
-    private $_scheme          = 'http';
+    private $_protocol        = 'HTTP';
     private $_port            = 80;
     private $_method          = self::METHOD_GET;
     private $_userAgent;
@@ -81,11 +81,11 @@ class Request {
     }
 
     private function processEnvironment() {
-        $this->_method = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : Request::MODE_CONSOLE;
-        $this->_host   = !empty($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
-        $this->_scheme = 'http' . (isset($_SERVER['HTTPS']) ? 's' : '');
+        $this->_method   = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : Request::MODE_CONSOLE;
+        $this->_host     = !empty($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+        $this->_protocol = 'http' . (isset($_SERVER['HTTPS']) ? 's' : '');
         if (!empty($_SERVER['HTTP_X_SCHEME']) && ($_SERVER['HTTP_X_SCHEME'] == 'https')) {
-            $this->_scheme = 'https';
+            $this->_protocol = 'https';
         }
         $this->detectExecutionMode();
 
@@ -207,6 +207,10 @@ class Request {
         return $this->_port;
     }
 
+    public function getProtocol() {
+        return $this->_protocol;
+    }
+
     public function getHost() {
         return $this->_host;
     }
@@ -222,7 +226,7 @@ class Request {
     }
 
     public function setCookie($name, $value) {
-        $this->_cookie[$name] = $value;
+        $this->_cookies[$name] = $value;
     }
 
     public function setHeader($name, $value) {
@@ -245,6 +249,11 @@ class Request {
         return $this;
     }
 
+    public function setProtocol($protocol) {
+        $this->_protocol = strtoupper($protocol);
+        return $this;
+    }
+
     public function setUserAgent($userAgent) {
         $this->_userAgent = $userAgent;
     }
@@ -263,7 +272,21 @@ class Request {
     }
 
     public function setUri($uri) {
-        $this->_uri = $uri;
+        if (strpos($uri, '://') !== false) {
+            $info = null;
+            preg_match('#(.+)://(.+)/(.*)#', $uri, $info);
+            $this->setProtocol($info[1]);
+            if ($this->_protocol == 'HTTPS') {
+                $this->setPort(443);
+            }
+            $this->setHost($info[2]);
+            $this->_uri = $info[3];
+        } else {
+            $this->_uri = $uri;
+        }
+        if ($this->_uri[0] !== '/') {
+            $this->_uri = '/' . $this->_uri;
+        }
         return $this;
     }
 
@@ -328,7 +351,7 @@ class Request {
         }
         $getData = substr($getData, 0, -1);
 
-        $request = $this->_method . ' ' . $this->_scheme . '://' . $this->_host . $this->_uri . $getData . ' HTTP/1.1' . $CRLF;
+        $request = $this->_method . ' ' . $this->_protocol . '://' . $this->_host . $this->_uri . $getData . ' HTTP/1.1' . $CRLF;
         $request .= 'Host: ' . $this->_host . $CRLF;
         $request .= 'User-agent: ' . $this->_userAgent . $CRLF;
 
@@ -375,30 +398,33 @@ class Request {
         $request .= $CRLF;
         $errorNumber  = null;
         $errorMessage = '';
-        $handler      = fsockopen((($this->_scheme == 'https') ? 'ssl://' : '') . $this->_host, $this->_port, $errorNumber, $errorMessage, $this->_timeout);
+        $handler      = fsockopen((($this->_protocol == 'https') ? 'ssl://' : '') . $this->_host, $this->_port, $errorNumber, $errorMessage, $this->_timeout);
 
         fputs($handler, $request);
 
-        $responseHeaders = array();
-        $responseData    = '';
-        $processHeaders  = true;
+        $contentData    = '';
+        $processHeaders = true;
+        $headerData     = '';
         while ($line = fgets($handler)) {
             if (($line == "\n") || ($line == "\r\n")) $processHeaders = false;
-            $processHeaders ? $responseHeaders[] = $line : $responseData .= $line;
+            if ($processHeaders) {
+                $headerData .= $line;
+            } else {
+                $contentData .= $line;
+            }
+//            $processHeaders ? $responseHeaders[] = $line : $responseData .= $line;
         }
         fclose($handler);
 
-        if (strpos(strtolower(var_export($responseHeaders, true)), "transfer-encoding: chunked") !== false) {
-            $responseData = self::unchunk($responseData);
+        if (strpos(strtolower($headerData), "transfer-encoding: chunked") !== false) {
+            $contentData = self::unchunk($contentData);
         }
-        if (strpos(strtolower(var_export($responseHeaders, true)), "content-encoding: gzip") !== false) {
-            $responseData = gzinflate(substr($responseData, 10, -8));//gzdecode($results);
-        } else if (strpos(strtolower(var_export($responseHeaders, true)), "content-encoding: deflate") !== false) {
-            $responseData = gzinflate($responseData);
+        if (strpos(strtolower($headerData), "content-encoding: gzip") !== false) {
+            $contentData = gzinflate(substr($contentData, 10, -8));//gzdecode($results);
+        } else if (strpos(strtolower($headerData), "content-encoding: deflate") !== false) {
+            $contentData = gzinflate($contentData);
         }
-//        return array('headers' => $responseHeaders, 'data' => $responseData);
-        $response = new Response($responseData, 200);
-        $response->getHeaders()->setFromStringsArray($responseHeaders);
+        $response = new Response($contentData, 200, $headerData);
         return $response;
     }
 

@@ -25,19 +25,22 @@ class HeaderStorage {
 
     public function add($name, $value) {
         if ($this->_storage->has($name)) {
-            if (!is_array($this->_storage->$name)) {
-                $this->_storage->$name = array($this->_storage->$name);
+            if (!is_array($this->_storage[$name])) {
+                $this->_storage[$name] = array($this->_storage[$name]);
             }
             $this->_storage[$name][] = $value;
         } else {
-            $this->_storage->$name = $value;
+            $this->_storage[$name] = $value;
         }
         return $this;
     }
 
     public function addFromString($header) {
-        $header = explode(':', $header);
-        $this->add(trim($header[0]), trim($header[1]));
+        if (strpos($header, ':') !== false) {
+            $info = null;
+            preg_match('#(.+):\s+?(.*)$#U', $header, $info);
+            $this->add($info[1], $info[2]);
+        }
         return $this;
     }
 
@@ -49,7 +52,7 @@ class HeaderStorage {
     }
 
     public function set($name, $value) {
-        $this->_storage->$name = $value;
+        $this->_storage->offsetSet($name, $value);
         return $this;
     }
 

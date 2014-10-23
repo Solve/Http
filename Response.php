@@ -21,6 +21,7 @@ use Solve\Storage\ArrayStorage;
  * @author Alexandr Viniychuk <alexandr.viniychuk@icloud.com>
  */
 class Response {
+    const PROTOCOL_HTTP = 'HTTP';
 
     /**
      * @var HeaderStorage
@@ -29,6 +30,7 @@ class Response {
     private $_cookies     = array();
     private $_content    = null;
     private $_charset    = 'UTF-8';
+    private $_protocol   = Response::PROTOCOL_HTTP;
     private $_statusCode = 200;
     private $_statusText = '';
 
@@ -38,6 +40,9 @@ class Response {
         $this->_statusCode = $statusCode;
         $this->_statusText = HttpStatus::$statusTexts[$statusCode];
         $this->_headers    = new HeaderStorage();
+        if (!empty($headers)) {
+            $this->parseHeaders($headers);
+        }
     }
 
     public function send() {
@@ -145,13 +150,34 @@ class Response {
         return $this;
     }
 
+    /**
+     * @param array|mixed $headers
+     */
+    public function parseHeaders($headers) {
+        if (!is_array($headers)) {
+            $headers = explode("\r\n", $headers);
+        }
+        foreach($headers as $header) {
+            if (strpos($header, ':') === false) {
+                $info = explode(' ', $header);
+                if (count($info) > 2) {
+                    $protocol = explode('/', $info[0]);
+                    $this->setProtocol($protocol[0]);
+                    $this->setStatusCode($info[1]);
+                }
+            } else {
+                $this->_headers->addFromString($header);
+            }
+        }
+    }
+
     public function setHeader($name, $value) {
-        $this->_headers[$name] = $value;
+        $this->_headers->set($name, $value);
         return $this;
     }
 
     public function getHeader($name) {
-        return empty($this->_headers[$name]) ? null : $this->_headers[$name];
+        return $this->_headers->get($name);
     }
 
     public function getHeaders() {
@@ -167,12 +193,25 @@ class Response {
         return $this;
     }
 
+    public function getProtocol() {
+        return $this->_protocol;
+    }
+
+    public function setProtocol($protocol) {
+        $this->_protocol = strtoupper($protocol);
+        return $this;
+    }
+
     public function getStatusCode() {
         return $this->_statusCode;
     }
 
+    public function getStatusText(){
+        return HttpStatus::$statusTexts[$this->_statusCode];
+    }
+
     public function setStatusCode($statusCode) {
-        $this->_statusCode = $statusCode;
+        $this->_statusCode = (int)$statusCode;
         $this->_statusText = HttpStatus::$statusTexts[$statusCode];
         return $this;
     }

@@ -24,13 +24,11 @@ class RequestTest extends \PHPUnit_Framework_TestCase {
         $this->assertEquals(Request::MODE_CONSOLE, $request->getExecutionMode(), 'Console request detected');
 
         $response = Request::createInstance()->setHost('google.com')->send();
-        var_dump($response);die();
-        var_dump($response->getHeaders()->getAll());die();
+        $this->assertTrue($response->isRedirection(), 'google.com returns redirection');
         if ($response->isRedirection()) {
+            $response = Request::createInstance()->setUri($response->getHeader('Location'))->send();
         }
-        var_dump($response->getContent());die();
-
-        die('1');
+        $this->assertTrue($response->isOk(), 'got it after redirect');
     }
 
 }
