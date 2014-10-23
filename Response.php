@@ -169,6 +169,14 @@ class Response {
                 $this->_headers->addFromString($header);
             }
         }
+        if ($this->_headers->has('Set-Cookie')) {
+            foreach($this->_headers->get('Set-Cookie') as $cookieInfo) {
+                $posEquals = strpos($cookieInfo, '=');
+                $cookieName = substr($cookieInfo, 0, $posEquals);
+                $cookieValue = substr($cookieInfo, $posEquals+1);
+                $this->_cookies[$cookieName] = $cookieValue;
+            }
+        }
     }
 
     public function setHeader($name, $value) {

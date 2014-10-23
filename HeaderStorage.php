@@ -61,6 +61,10 @@ class HeaderStorage {
         return $this;
     }
 
+    public function has($name) {
+        return $this->_storage->has($name);
+    }
+
     public function get($name) {
         return $this->_storage->get($name);
     }
