@@ -38,6 +38,7 @@ class Request {
     private $_executionMode;
 
     private $_uri;
+    private $_queryString;
     private $_host;
     private $_protocol        = 'HTTP';
     private $_port            = 80;
@@ -113,9 +114,10 @@ class Request {
 
     private function detectUri() {
         if ($this->_executionMode != Request::MODE_CONSOLE) {
-            $this->_uri = str_replace('%20', ' ', $_SERVER['REQUEST_URI'] . '');
-            if (!empty($_SERVER['QUERY_STRING'])) {
-                $this->_uri = substr($this->_uri, 0, -strlen($_SERVER['QUERY_STRING']) - 1);
+            $this->_uri = urldecode($_SERVER['REQUEST_URI']);
+            $this->_queryString = urldecode($_SERVER['QUERY_STRING']);
+            if (!empty($this->_queryString)) {
+                $this->_uri = substr($this->_uri, 0, -strlen($this->_queryString) - 1);
             }
             if (strlen($this->_uri) > 1 && $this->_uri[0] == '/') {
                 $this->_uri = substr($this->_uri, 1);
