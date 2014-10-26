@@ -15,7 +15,7 @@ use Solve\Storage\ArrayStorage;
  * Class Request
  * @package Solve\Http
  *
- * Class Request represents income request
+ * Class Request represents requests and operate with income request
  *
  * @version 1.0
  * @author Alexandr Viniychuk <alexandr.viniychuk@icloud.com>
@@ -30,8 +30,6 @@ class Request {
     const METHOD_DELETE  = 'DELETE';
     const METHOD_UPDATE  = 'UPDATE';
     const METHOD_OPTIONS = 'OPTIONS';
-    private $_getVars  = array();
-    private $_postVars = array();
     private $_headers  = array();
     private $_cookies  = array();
 
@@ -55,7 +53,14 @@ class Request {
         'Accept-Encoding' => '*',
         'Accept-Charset'  => '*',
     );
-
+    /**
+     * @var ArrayStorage
+     */
+    private $_getVars  = array();
+    /**
+     * @var ArrayStorage
+     */
+    private $_postVars = array();
     /**
      * @var ArrayStorage
      */
@@ -67,6 +72,8 @@ class Request {
 
     public function __construct() {
         $this->_vars = new ArrayStorage();
+        $this->_getVars = new ArrayStorage();
+        $this->_postVars = new ArrayStorage();
     }
 
     public static function createInstance() {
@@ -201,6 +208,10 @@ class Request {
         return $this->_uri;
     }
 
+    public function getQueryString() {
+        return $this->_queryString;
+    }
+
     public function getUserAgent() {
         return $this->_userAgent;
     }
@@ -215,6 +226,18 @@ class Request {
 
     public function getHost() {
         return $this->_host;
+    }
+
+    public function getGETVar($deepKey, $defaultValue = null) {
+        return $this->_getVars->getDeepValue($deepKey, $defaultValue);
+    }
+
+    public function getPOSTVar($deepKey, $defaultValue = null) {
+        return $this->_postVars->getDeepValue($deepKey, $defaultValue);
+    }
+
+    public function getVar($deepKey, $defaultValue = null) {
+        return $this->_vars->getDeepValue($deepKey, $defaultValue);
     }
 
     /*
@@ -289,6 +312,11 @@ class Request {
         if ($this->_uri[0] !== '/') {
             $this->_uri = '/' . $this->_uri;
         }
+        return $this;
+    }
+
+    public function setQueryString($queryString) {
+        $this->_queryString = $queryString;
         return $this;
     }
 
