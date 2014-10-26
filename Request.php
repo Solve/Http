@@ -88,7 +88,7 @@ class Request {
         return self::$_incomeRequestInstance;
     }
 
-    private function processEnvironment() {
+    public function processEnvironment() {
         $this->_method   = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : Request::MODE_CONSOLE;
         $this->_host     = !empty($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
         $this->_protocol = 'http' . (isset($_SERVER['HTTPS']) ? 's' : '');
@@ -102,12 +102,12 @@ class Request {
             $this->processRequestOptionsMethod();
         }
 
-        $this->setVars($_GET);
+        $this->setGETVars($_GET);
         if ($this->isJsonRequest()) {
             $data = convertObjectToArray(json_decode(file_get_contents("php://input")));
             $this->setVars($data);
         } else {
-            $this->setVars($_POST);
+            $this->setPOSTVars($_POST);
         }
 
         $this->detectUri();
@@ -125,6 +125,9 @@ class Request {
             $this->_queryString = urldecode($_SERVER['QUERY_STRING']);
             if (!empty($this->_queryString)) {
                 $this->_uri = substr($this->_uri, 0, -strlen($this->_queryString) - 1);
+                $vars = array();
+                parse_str($this->_queryString, $vars);
+                $this->setVars($vars);
             }
             if (strlen($this->_uri) > 1 && $this->_uri[0] == '/') {
                 $this->_uri = substr($this->_uri, 1);
@@ -145,6 +148,7 @@ class Request {
     }
 
     private function processRequestOptionsMethod() {
+        if (headers_sent()) return true;
         $headers = array(
             'Access-Control-Allow-Headers:accept,authorization,content-type,session-token',
             'Access-Control-Allow-Methods:GET,POST,PUT,DELETE,OPTIONS',

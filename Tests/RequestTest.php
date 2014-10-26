@@ -33,5 +33,16 @@ class RequestTest extends \PHPUnit_Framework_TestCase {
         $this->assertTrue($response->isOk(), 'got it after redirect');
     }
 
+    public function testRequestServer() {
+        $_SERVER['REQUEST_METHOD'] = Request::METHOD_GET;
+        $_SERVER['REQUEST_URI']    = '/products/2/';
+        $_SERVER['QUERY_STRING']   = 'id=12';
+        $_SERVER['HTTP_HOST']      = 'test.com';
+        $_SERVER['DOCUMENT_ROOT']      = '/';
+        $request                   = new Request();
+        $request->processEnvironment();
+        $this->assertEquals(12, $request->getVar('id'), 'parsing query string');
+    }
+
 }
  
