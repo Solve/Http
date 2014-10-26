@@ -111,6 +111,7 @@ class Request {
         }
 
         $this->detectUri();
+        return $this;
     }
 
     private function detectExecutionMode() {
@@ -138,13 +139,13 @@ class Request {
 
     }
 
-    private function processHeaders() {
+    public function processHeaders() {
         $data           = getallheaders();
         $this->_headers = array();
         foreach ($data as $key => $value) {
             $this->_headers[strtolower($key)] = $value;
         }
-
+        return $this;
     }
 
     private function processRequestOptionsMethod() {
@@ -242,6 +243,10 @@ class Request {
 
     public function getVar($deepKey, $defaultValue = null) {
         return $this->_vars->getDeepValue($deepKey, $defaultValue);
+    }
+
+    public function getVars() {
+        return $this->_vars;
     }
 
     /*
