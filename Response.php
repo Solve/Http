@@ -65,22 +65,18 @@ class Response {
     }
 
     public function sendHeaders() {
-        // headers have already been sent by the developer
         if (headers_sent()) {
-            return $this;
+            throw new \Exception('Can not send headers');
         }
 
-        // status
         header(sprintf('HTTP/%s %s %s', '1.1', $this->_statusCode, $this->_statusText), true, $this->_statusCode);
 
-        // headers
         foreach ($this->_headers as $name => $values) {
             foreach ($values as $value) {
                 header($name . ': ' . $value, false, $this->_statusCode);
             }
         }
 
-        // cookies
         foreach ($this->_cookies as $cookie) {
             setcookie($cookie['name'], $cookie['value'], $cookie['expiresTime'], $cookie['path'], $cookie['domain'], $cookie['isSecure'], $cookie['isHttpOnly']);
         }
