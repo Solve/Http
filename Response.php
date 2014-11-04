@@ -28,11 +28,11 @@ class Response {
      */
     private $_headers;
     private $_cookies     = array();
-    private $_content    = null;
-    private $_charset    = 'UTF-8';
-    private $_protocol   = Response::PROTOCOL_HTTP;
-    private $_statusCode = 200;
-    private $_statusText = '';
+    private $_content     = null;
+    private $_charset     = 'UTF-8';
+    private $_protocol    = Response::PROTOCOL_HTTP;
+    private $_statusCode  = 200;
+    private $_statusText  = '';
 
 
     public function __construct($content = null, $statusCode = 200, $headers = array()) {
@@ -66,7 +66,7 @@ class Response {
 
     public function sendHeaders() {
         if (headers_sent()) {
-            throw new \Exception('Can not send headers');
+            return false;
         }
 
         header(sprintf('HTTP/%s %s %s', '1.1', $this->_statusCode, $this->_statusText), true, $this->_statusCode);
@@ -153,7 +153,7 @@ class Response {
         if (!is_array($headers)) {
             $headers = explode("\r\n", $headers);
         }
-        foreach($headers as $header) {
+        foreach ($headers as $header) {
             if (strpos($header, ':') === false) {
                 $info = explode(' ', $header);
                 if (count($info) > 2) {
@@ -166,10 +166,10 @@ class Response {
             }
         }
         if ($this->_headers->has('Set-Cookie')) {
-            foreach($this->_headers->get('Set-Cookie') as $cookieInfo) {
-                $posEquals = strpos($cookieInfo, '=');
-                $cookieName = substr($cookieInfo, 0, $posEquals);
-                $cookieValue = substr($cookieInfo, $posEquals+1);
+            foreach ($this->_headers->get('Set-Cookie') as $cookieInfo) {
+                $posEquals                   = strpos($cookieInfo, '=');
+                $cookieName                  = substr($cookieInfo, 0, $posEquals);
+                $cookieValue                 = substr($cookieInfo, $posEquals + 1);
                 $this->_cookies[$cookieName] = $cookieValue;
             }
         }
@@ -210,7 +210,7 @@ class Response {
         return $this->_statusCode;
     }
 
-    public function getStatusText(){
+    public function getStatusText() {
         return HttpStatus::$statusTexts[$this->_statusCode];
     }
 
