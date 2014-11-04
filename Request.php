@@ -181,6 +181,10 @@ class Request {
         return strpos($this->getContentType(), 'application/json') === 0;
     }
 
+    public function getAcceptType() {
+        return empty($this->_headers['Accept']) ? '*' : $this->_headers['Accept'];
+    }
+
     public function getContentType() {
         return !empty($this->_headers['content-type']) ? $this->_headers['content-type'] : '';
     }
