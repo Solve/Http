@@ -182,7 +182,7 @@ class Request {
     }
 
     public function getAcceptType() {
-        return empty($this->_headers['Accept']) ? '*' : $this->_headers['Accept'];
+        return empty($this->_headers['accept']) ? '*' : $this->_headers['accept'];
     }
 
     public function getContentType() {
