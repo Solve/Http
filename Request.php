@@ -320,7 +320,7 @@ class Request {
             $this->setHost($info[2]);
             $this->_uri = $info[3];
         } else {
-            $this->_uri = $uri;
+            $this->_uri = empty($uri) ? '/' : $uri;
         }
         if ($this->_uri[0] !== '/') {
             $this->_uri = '/' . $this->_uri;
