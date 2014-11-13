@@ -151,7 +151,7 @@ class Request {
     private function processRequestOptionsMethod() {
         if (headers_sent()) return true;
         $headers = array(
-            'Access-Control-Allow-Headers:accept,authorization,content-type,session-token',
+            'Access-Control-Allow-Headers:accept,authorization,content-type,session-token,x-requested-with',
             'Access-Control-Allow-Methods:GET,POST,PUT,DELETE,OPTIONS',
             'Access-Control-Allow-Origin:*'
         );
