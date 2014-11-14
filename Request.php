@@ -104,7 +104,7 @@ class Request {
 
         $this->setGETVars($_GET);
         if ($this->isJsonRequest()) {
-            $data = convertObjectToArray(json_decode(file_get_contents("php://input")));
+            $data = $this->convertObjectToArray(json_decode(file_get_contents("php://input")));
             $this->setVars($data);
         } else {
             $this->setPOSTVars($_POST);
@@ -112,6 +112,13 @@ class Request {
 
         $this->detectUri();
         return $this;
+    }
+
+    private function convertObjectToArray($object) {
+        if(!is_object($object) && !is_array($object))
+            return $object;
+
+        return array_map(array($this, 'convertObjectToArray'), (array) $object);
     }
 
     private function detectExecutionMode() {
@@ -136,7 +143,6 @@ class Request {
         } else {
             $this->_uri = '/' . (!empty($_SERVER['argv'][1]) ? str_replace(':', '/', $_SERVER['argv'][1]) : '');
         }
-
     }
 
     public function processHeaders() {
@@ -151,7 +157,7 @@ class Request {
     private function processRequestOptionsMethod() {
         if (headers_sent()) return true;
         $headers = array(
-            'Access-Control-Allow-Headers:accept,authorization,content-type,session-token,x-requested-with',
+            'Access-Control-Allow-Headers:accept,authorization,content-type,session-token',
             'Access-Control-Allow-Methods:GET,POST,PUT,DELETE,OPTIONS',
             'Access-Control-Allow-Origin:*'
         );
