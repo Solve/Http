@@ -65,10 +65,6 @@ class Response {
     }
 
     public function sendHeaders() {
-        if (headers_sent()) {
-            return false;
-        }
-
         header(sprintf('HTTP/%s %s %s', '1.1', $this->_statusCode, $this->_statusText), true, $this->_statusCode);
 
         foreach ($this->_headers as $name => $values) {
