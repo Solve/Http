@@ -69,8 +69,8 @@ class Response {
 
         header(sprintf('HTTP/%s %s %s', '1.1', $this->_statusCode, $this->_statusText), true, $this->_statusCode);
 
-        foreach ($this->_headers as $name => $values) {
-            foreach ($values as $value) {
+        foreach ($this->_headers->getAll() as $name => $values) {
+            foreach ((array)$values as $value) {
                 header($name . ': ' . $value, false, $this->_statusCode);
             }
         }
