@@ -107,6 +107,7 @@ class Request {
             $data = $this->convertObjectToArray(json_decode(file_get_contents("php://input")));
             $this->setVars($data);
         } else {
+            $this->setVars($_POST);
             $this->setPOSTVars($_POST);
         }
 
@@ -352,7 +353,7 @@ class Request {
     }
 
     public function setPOSTVar($name, $value) {
-        $this->_getVars[$name] = $value;
+        $this->_postVars[$name] = $value;
         return $this;
     }
 
