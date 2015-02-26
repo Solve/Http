@@ -4,7 +4,7 @@
  *
  * @author Alexandr Viniychuk <alexandr.viniychuk@icloud.com>
  * @copyright 2009-2014, Alexandr Viniychuk
- * created: 10/20/14 7:07 PM
+ * created: 10/20/14 7:00 PM
  */
 
 namespace Solve\Http;
@@ -12,191 +12,286 @@ namespace Solve\Http;
 use Solve\Storage\ArrayStorage;
 
 /**
- * Class Response
+ * Class Request
  * @package Solve\Http
  *
- * Class Response is used to generate correct response from application
+ * Class Request represents requests and operate with income request
  *
  * @version 1.0
  * @author Alexandr Viniychuk <alexandr.viniychuk@icloud.com>
  */
-class Response {
-    const PROTOCOL_HTTP = 'HTTP';
+class Request {
 
+    const MODE_WEB       = 'WEB';
+    const MODE_CONSOLE   = 'CONSOLE';
+    const METHOD_POST    = 'POST';
+    const METHOD_GET     = 'GET';
+    const METHOD_PUT     = 'PUT';
+    const METHOD_DELETE  = 'DELETE';
+    const METHOD_UPDATE  = 'UPDATE';
+    const METHOD_OPTIONS = 'OPTIONS';
+    private $_headers  = array();
+    private $_cookies  = array();
+
+    private $_executionMode;
+
+    private $_uri;
+    private $_queryString;
+    private $_host;
+    private $_protocol        = 'HTTP';
+    private $_port            = 80;
+    private $_method          = self::METHOD_GET;
+    private $_userAgent;
+    private $_basicAuthenticationData;
+    private $_attachments     = array();
+    private $_timeout         = 30;
+    private $_customBodyParts = array();
+    private $_defaultHeaders  = array(
+        'Accept'          => '*/*',
+        'Content-type'    => 'application/x-www-form-urlencoded',
+        'Accept-Language' => '*',
+        'Accept-Encoding' => '*',
+        'Accept-Charset'  => '*',
+    );
     /**
-     * @var HeaderStorage
+     * @var ArrayStorage
      */
-    private $_headers;
-    private $_cookies     = array();
-    private $_content     = null;
-    private $_charset     = 'UTF-8';
-    private $_protocol    = Response::PROTOCOL_HTTP;
-    private $_statusCode  = 200;
-    private $_statusText  = '';
+    private $_getVars  = array();
+    /**
+     * @var ArrayStorage
+     */
+    private $_postVars = array();
+    /**
+     * @var ArrayStorage
+     */
+    private $_vars;
+    /**
+     * @var Request
+     */
+    static private $_incomeRequestInstance;
 
-
-    public function __construct($content = null, $statusCode = 200, $headers = array()) {
-        $this->_content    = $content;
-        $this->_statusCode = $statusCode;
-        $this->_statusText = HttpStatus::$statusTexts[$statusCode];
-        $this->_headers    = new HeaderStorage();
-        if (!empty($headers)) {
-            $this->parseHeaders($headers);
-        }
+    public function __construct() {
+        $this->_vars = new ArrayStorage();
+        $this->_getVars = new ArrayStorage();
+        $this->_postVars = new ArrayStorage();
     }
 
-    public function send() {
-        $this->sendHeaders();
-        $this->sendContent();
+    public static function createInstance() {
+        return new Request();
+    }
 
-        if (function_exists('fastcgi_finish_request')) {
-            fastcgi_finish_request();
-        } elseif ('cli' !== PHP_SAPI) {
-            ob_end_flush();
-            flush();
+    public static function getIncomeRequest() {
+        if (!self::$_incomeRequestInstance) {
+            self::$_incomeRequestInstance = new Request();
+            self::$_incomeRequestInstance->processEnvironment();
+        }
+        return self::$_incomeRequestInstance;
+    }
+
+    public function processEnvironment() {
+        $this->_method   = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : Request::MODE_CONSOLE;
+        $this->_host     = !empty($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+        $this->_protocol = 'http' . (isset($_SERVER['HTTPS']) ? 's' : '');
+        if (!empty($_SERVER['HTTP_X_SCHEME']) && ($_SERVER['HTTP_X_SCHEME'] == 'https')) {
+            $this->_protocol = 'https';
+        }
+        $this->detectExecutionMode();
+
+        $this->processHeaders();
+        if (!$this->isConsoleRequest()) {
+            $this->processRequestOptionsMethod();
         }
 
+        $this->setGETVars($_GET);
+        if ($this->isJsonRequest()) {
+            $data = $this->convertObjectToArray(json_decode(file_get_contents("php://input")));
+            $this->setVars($data);
+        } else {
+            $this->setVars($_POST);
+            $this->setPOSTVars($_POST);
+        }
+
+        $this->detectUri();
         return $this;
     }
 
-    public function sendContent() {
-        echo $this->_content;
-        return $this;
+    private function convertObjectToArray($object) {
+        if(!is_object($object) && !is_array($object))
+            return $object;
+
+        return array_map(array($this, 'convertObjectToArray'), (array) $object);
     }
 
-    public function sendHeaders() {
-        if (empty($_SERVER['DOCUMENT_ROOT'])) return true;
+    private function detectExecutionMode() {
+        if (empty($_SERVER['DOCUMENT_ROOT'])) {
+            $this->_executionMode = Request::MODE_CONSOLE;
+        }
+    }
 
-        header(sprintf('HTTP/%s %s %s', '1.1', $this->_statusCode, $this->_statusText), true, $this->_statusCode);
-
-        foreach ($this->_headers->getAll() as $name => $values) {
-            foreach ((array)$values as $value) {
-                header($name . ': ' . $value, false, $this->_statusCode);
+    private function detectUri() {
+        if ($this->_executionMode != Request::MODE_CONSOLE) {
+            $this->_uri = urldecode($_SERVER['REQUEST_URI']);
+            $this->_queryString = urldecode($_SERVER['QUERY_STRING']);
+            if (!empty($this->_queryString)) {
+                $this->_uri = substr($this->_uri, 0, -strlen($this->_queryString) - 1);
+                $vars = array();
+                parse_str($this->_queryString, $vars);
+                $this->setVars($vars);
             }
-        }
-
-        foreach ($this->_cookies as $cookie) {
-            setcookie($cookie['name'], $cookie['value'], $cookie['expiresTime'], $cookie['path'], $cookie['domain'], $cookie['isSecure'], $cookie['isHttpOnly']);
-        }
-
-        return $this;
-    }
-
-    public function setNotModified() {
-        $this->setStatusCode(304);
-        $this->setContent(null);
-
-        // remove headers that MUST NOT be included with 304 Not Modified responses
-        foreach (array('Allow', 'Content-Encoding', 'Content-Language', 'Content-Length', 'Content-MD5', 'Content-Type', 'Last-Modified') as $header) {
-            $this->_headers->remove($header);
-        }
-
-        return $this;
-    }
-
-    public function setDate(\DateTime $date) {
-        $date->setTimezone(new \DateTimeZone('UTC'));
-        $this->_headers->set('Date', $date->format('D, d M Y H:i:s') . ' GMT');
-
-        return $this;
-    }
-
-    public function setLastModified(\DateTime $date = null) {
-        if (null === $date) {
-            $this->_headers->remove('Last-Modified');
+            if (strlen($this->_uri) > 1 && $this->_uri[0] == '/') {
+                $this->_uri = substr($this->_uri, 1);
+            }
         } else {
-            $date = clone $date;
-            $date->setTimezone(new \DateTimeZone('UTC'));
-            $this->_headers->set('Last-Modified', $date->format('D, d M Y H:i:s') . ' GMT');
+            $this->_uri = '/' . (!empty($_SERVER['argv'][1]) ? str_replace(':', '/', $_SERVER['argv'][1]) : '');
         }
-
-        return $this;
     }
 
-    public function setExpires(\DateTime $date = null) {
-        if (null === $date) {
-            $this->_headers->remove('Expires');
-        } else {
-            $date = clone $date;
-            $date->setTimezone(new \DateTimeZone('UTC'));
-            $this->_headers->set('Expires', $date->format('D, d M Y H:i:s') . ' GMT');
+    public function processHeaders() {
+        $data           = getallheaders();
+        $this->_headers = array();
+        foreach ($data as $key => $value) {
+            $this->_headers[strtolower($key)] = $value;
         }
-
         return $this;
     }
 
-    public function setCharset($charset) {
-        $this->_charset = $charset;
-
-        return $this;
-    }
-
-    public function setCookie($name, $value, $expiresTime = null, $path = null, $domain = null, $isSecure = null, $isHttpOnly = null) {
-        $this->_cookies[] = array(
-            'name'        => $name,
-            'value'       => $value,
-            'expiresTime' => $expiresTime,
-            'path'        => $path,
-            'isSecure'    => $isSecure,
-            'isHttpOnly'  => $isHttpOnly,
-            'domain'      => $domain,
+    private function processRequestOptionsMethod() {
+        if (headers_sent()) return true;
+        $headers = array(
+            'Access-Control-Allow-Headers:accept,authorization,content-type,session-token,x-requested-with',
+            'Access-Control-Allow-Methods:GET,POST,PUT,DELETE,OPTIONS',
+            'Access-Control-Allow-Origin:*'
         );
-        return $this;
-    }
-
-    /**
-     * @param array|mixed $headers
-     */
-    public function parseHeaders($headers) {
-        if (!is_array($headers)) {
-            $headers = explode("\r\n", $headers);
-        }
         foreach ($headers as $header) {
-            if (strpos($header, ':') === false) {
-                $info = explode(' ', $header);
-                if (count($info) > 2) {
-                    $protocol = explode('/', $info[0]);
-                    $this->setProtocol($protocol[0]);
-                    $this->setStatusCode($info[1]);
-                }
-            } else {
-                $this->_headers->addFromString($header);
-            }
+            header($header);
         }
-        if ($this->_headers->has('Set-Cookie')) {
-            foreach ($this->_headers->get('Set-Cookie') as $cookieInfo) {
-                $posEquals                   = strpos($cookieInfo, '=');
-                $cookieName                  = substr($cookieInfo, 0, $posEquals);
-                $cookieValue                 = substr($cookieInfo, $posEquals + 1);
-                $this->_cookies[$cookieName] = $cookieValue;
-            }
+        if ($this->_method == Request::METHOD_OPTIONS) {
+            die();
         }
     }
 
-    public function setHeader($name, $value) {
-        $this->_headers->set($name, $value);
-        return $this;
+    public function isConsoleRequest() {
+        return $this->_executionMode == Request::MODE_CONSOLE;
     }
 
-    public function getHeader($name) {
-        return $this->_headers->get($name);
+    public function isXHR() {
+        if ((!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && ($_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest'))
+            || (isset($_REQUEST['XHR_REQUEST']))
+            || !empty($_REQUEST['IFRAME_FORM_SENT'])
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    public function isJsonRequest() {
+        return strpos($this->getContentType(), 'application/json') === 0;
+    }
+
+    public function getAcceptType() {
+        return empty($this->_headers['accept']) ? '*' : $this->_headers['accept'];
+    }
+
+    public function getContentType() {
+        return !empty($this->_headers['content-type']) ? $this->_headers['content-type'] : '';
+    }
+
+    public function getExecutionMode() {
+        return $this->_executionMode;
     }
 
     public function getHeaders() {
         return $this->_headers;
     }
 
-    public function getContent() {
-        return $this->_content;
+    public function getHeader($name) {
+        return !empty($this->_headers[$name]) ? $this->_headers[$name] : '';
     }
 
-    public function setContent($content) {
-        $this->_content = $content;
-        return $this;
+    public function getIpAddress() {
+        $ip = '127.0.0.1';
+        if (!empty($_SERVER['REMOTE_ADDR'])) {
+            $ip = $_SERVER['REMOTE_ADDR'];
+        }
+        return $ip;
+    }
+
+    public function getMethod() {
+        return $this->_method;
+    }
+
+    public function getUri() {
+        return $this->_uri;
+    }
+
+    public function getQueryString() {
+        return $this->_queryString;
+    }
+
+    public function getUserAgent() {
+        return $this->_userAgent;
+    }
+
+    public function getPort() {
+        return $this->_port;
     }
 
     public function getProtocol() {
         return $this->_protocol;
+    }
+
+    public function getHost() {
+        return $this->_host;
+    }
+
+    public function getGETVar($deepKey, $defaultValue = null) {
+        return $this->_getVars->getDeepValue($deepKey, $defaultValue);
+    }
+
+    public function getPOSTVar($deepKey, $defaultValue = null) {
+        return $this->_postVars->getDeepValue($deepKey, $defaultValue);
+    }
+
+    public function getVar($deepKey, $defaultValue = null) {
+        return $this->_vars->getDeepValue($deepKey, $defaultValue);
+    }
+
+    public function getVars() {
+        return $this->_vars;
+    }
+
+    /*
+     * ################### SETTERS
+     */
+
+
+    public function setBasicAuthenticationData($user, $password) {
+        $this->_basicAuthenticationData = $user . ':' . $password;
+        return $this;
+    }
+
+    public function setCookie($name, $value) {
+        $this->_cookies[$name] = $value;
+    }
+
+    public function setHeader($name, $value) {
+        $this->_headers[$name] = $value;
+        return $this;
+    }
+
+    public function setHost($host) {
+        $this->_host = $host;
+        return $this;
+    }
+
+    public function setMethod($method) {
+        $this->_method = $method;
+        return $this;
+    }
+
+    public function setPort($port) {
+        $this->_port = $port;
+        return $this;
     }
 
     public function setProtocol($protocol) {
@@ -204,51 +299,209 @@ class Response {
         return $this;
     }
 
-    public function getStatusCode() {
-        return $this->_statusCode;
+    public function setUserAgent($userAgent) {
+        $this->_userAgent = $userAgent;
     }
 
-    public function getStatusText() {
-        return HttpStatus::$statusTexts[$this->_statusCode];
-    }
 
-    public function setStatusCode($statusCode) {
-        $this->_statusCode = (int)$statusCode;
-        $this->_statusText = HttpStatus::$statusTexts[$statusCode];
+    public function setVar($name, $value) {
+        $this->_vars->setDeepValue($name, $value);
         return $this;
     }
 
-    public function isSuccessful() {
-        return $this->_statusCode >= 200 && $this->_statusCode < 300;
+    public function setVars($array) {
+        foreach ($array as $key => $value) {
+            $this->setVar($key, $value);
+        }
+        return $this;
     }
 
-    public function isError() {
-        return $this->_statusCode >= 400 && $this->_statusCode < 600;
+    public function setUri($uri) {
+        if (strpos($uri, '://') !== false) {
+            $info = null;
+            preg_match('#(.+)://(.+)/(.*)#', $uri, $info);
+            $this->setProtocol($info[1]);
+            if ($this->_protocol == 'HTTPS') {
+                $this->setPort(443);
+            }
+            $this->setHost($info[2]);
+            $this->_uri = $info[3];
+        } else {
+            $this->_uri = empty($uri) ? '/' : $uri;
+        }
+        if ($this->_uri[0] !== '/') {
+            $this->_uri = '/' . $this->_uri;
+        }
+        return $this;
     }
 
-    public function isRedirection() {
-        return $this->_statusCode >= 300 && $this->_statusCode < 400;
+    public function setQueryString($queryString) {
+        $this->_queryString = $queryString;
+        return $this;
     }
 
-    public function isClientError() {
-        return $this->_statusCode >= 400 && $this->_statusCode < 500;
+    public function setGETVar($name, $value) {
+        $this->_getVars[$name] = $value;
+        return $this;
     }
 
-    public function isServerError() {
-        return $this->_statusCode >= 500 && $this->_statusCode < 600;
+    public function setGETVars($array) {
+        foreach ($array as $key => $value) {
+            $this->setGETVar($key, $value);
+        }
+        return $this;
     }
 
-    public function isOk() {
-        return 200 === $this->_statusCode;
+    public function setPOSTVar($name, $value) {
+        $this->_postVars[$name] = $value;
+        return $this;
     }
 
-    public function isForbidden() {
-        return 403 === $this->_statusCode;
+    public function setPOSTVars($array) {
+        foreach ($array as $key => $value) {
+            $this->setPOSTVar($key, $value);
+        }
+        return $this;
     }
 
-    public function isNotFound() {
-        return 404 === $this->_statusCode;
+    /** SENDING REQUEST */
+    public function addCustomBodyPart($bodyPart) {
+        $this->_customBodyParts[] = $bodyPart;
     }
 
+    public function addAttachmentReference($name, $fileLocation) {
+        $this->_attachments[] = array(
+            'name' => $name,
+            'type' => 'reference',
+            'path' => $fileLocation
+        );
+        return $this;
+    }
 
+    private function fillDefaultHeaders() {
+        foreach ($this->_defaultHeaders as $name => $value) {
+            if (!array_key_exists($name, $this->_headers)) {
+                $this->setHeader($name, $value);
+            }
+        }
+    }
+
+    public function send() {
+
+        $this->fillDefaultHeaders();
+        $CRLF = "\r\n";
+
+        $getData        = '?';
+        $postData       = '';
+        $customBodyData = '';
+
+
+        foreach ($this->_getVars as $name => $value) {
+            $getData .= rawurlencode($name) . '=' . rawurlencode($value) . '&';
+        }
+        $getData = substr($getData, 0, -1);
+
+        $request = $this->_method . ' ' . $this->_protocol . '://' . $this->_host . $this->_uri . $getData . ' HTTP/1.1' . $CRLF;
+        $request .= 'Host: ' . $this->_host . $CRLF;
+        $request .= 'User-agent: ' . $this->_userAgent . $CRLF;
+
+        if ($this->_basicAuthenticationData) {
+            $request .= 'Authorization: Basic ' . base64_encode($this->_basicAuthenticationData) . $CRLF;
+        }
+
+        foreach ($this->_headers as $name => $value) {
+            $request .= $name . ': ' . $value . $CRLF;
+        }
+
+        $request .= 'Connection: close' . $CRLF;
+
+        if ((($this->_method == Request::METHOD_POST) || ($this->_method == Request::METHOD_PUT)) && (!empty($this->_post) || !empty($this->_attachments) || !empty($this->_customBodyParts))) {
+            if (empty($this->_attachments)) {
+                $request .= 'Content-Type: ' . $this->getContentType() . $CRLF;
+                $postData = http_build_query($this->_post);
+            } else {
+                $boundary = md5(uniqid(time()));
+                $request .= 'Content-Type: multipart/form-data; boundary=' . $boundary . $CRLF;
+                foreach ($this->_post as $name => $value) {
+                    $postData .= '--' . $boundary . $CRLF;
+                    $postData .= 'Content-Disposition: form-data; name="' . $name . '"' . $CRLF . $CRLF . $value . $CRLF;
+                }
+                foreach ($this->_attachments as $attachment) {
+                    if ($attachment['type'] == 'reference' && is_file($attachment['path'])) {
+                        $file_name = basename($attachment['path']);
+
+                        $postData .= '--' . $boundary . $CRLF;
+                        $postData .= 'Content-Disposition: form-data; name="' . $attachment['path'] . '"; filename="' . $file_name . '"' . $CRLF;
+                        $postData .= 'Content-Type: application/octet-stream' . $CRLF . $CRLF;
+                        $postData .= file_get_contents($attachment['path']) . $CRLF;
+                    }
+                }
+                $postData .= '--' . $boundary . '--' . $CRLF;
+            }
+            foreach ($this->_customBodyParts as $part) {
+                $customBodyData .= $part;
+            }
+            $request .= 'Content-Length: ' . (strlen($postData) + strlen($customBodyData)) . $CRLF . $CRLF;
+            if ($postData) $request .= $postData . $CRLF;
+            if ($customBodyData) $request .= $customBodyData . $CRLF;
+        }
+        $request .= $CRLF;
+        $errorNumber  = null;
+        $errorMessage = '';
+        $handler      = fsockopen((($this->_protocol == 'https') ? 'ssl://' : '') . $this->_host, $this->_port, $errorNumber, $errorMessage, $this->_timeout);
+
+        fputs($handler, $request);
+
+        $contentData    = '';
+        $processHeaders = true;
+        $headerData     = '';
+        while ($line = fgets($handler)) {
+            if (($line == "\n") || ($line == "\r\n")) $processHeaders = false;
+            if ($processHeaders) {
+                $headerData .= $line;
+            } else {
+                $contentData .= $line;
+            }
+//            $processHeaders ? $responseHeaders[] = $line : $responseData .= $line;
+        }
+        fclose($handler);
+
+        if (strpos(strtolower($headerData), "transfer-encoding: chunked") !== false) {
+            $contentData = self::unchunk($contentData);
+        }
+        if (strpos(strtolower($headerData), "content-encoding: gzip") !== false) {
+            $contentData = gzinflate(substr($contentData, 10, -8));//gzdecode($results);
+        } else if (strpos(strtolower($headerData), "content-encoding: deflate") !== false) {
+            $contentData = gzinflate($contentData);
+        }
+        $response = new Response($contentData, 200, $headerData);
+        return $response;
+    }
+
+    static private function unchunk($data) {
+        return preg_replace('/([0-9A-F]+)\r\n(.*)/sie',
+            '($cnt=@base_convert("\1", 16, 10))
+                               ?substr(($str=@strtr(\'\2\', array(\'\"\'=>\'"\', \'\\\\0\'=>"\x00"))), 0, $cnt).slRequest::unchunk(substr($str, $cnt+2))
+                               :""
+                              ',
+            $data
+        );
+    }
+
+}
+
+
+/**
+ * for old version of php
+ */
+if (!function_exists('getallheaders')) {
+    function getallheaders() {
+        $headers = array();
+        foreach ($_SERVER as $name => $value) {
+            if (substr($name, 0, 5) == 'HTTP_') {
+                $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+            }
+        }
+        return $headers;
+    }
 }
